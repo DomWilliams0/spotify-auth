@@ -3,9 +3,11 @@
 extern crate chrono;
 
 #[macro_use]
-extern crate quick_error;
+extern crate error_chain;
 
 mod errors;
+
+use errors::*;
 
 #[derive(Debug)]
 struct SpotifyAuth<State> {
@@ -59,7 +61,7 @@ impl SpotifyAuth<Unauthenticated> {
         redirect_uri: RedirectUri,
         scope: Scope,
         show_dialog: S,
-    ) -> Result<SpotifyAuth<Authenticating>, (Self, errors::AuthError)> {
+    ) -> Result<SpotifyAuth<Authenticating>, (Self, Error)> {
         // TODO send request to /authorize
         Ok(SpotifyAuth {
             state: Authenticating {},

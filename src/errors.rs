@@ -1,6 +1,14 @@
-quick_error! {
-    #[derive(Debug)]
-    pub enum AuthError {
-        NetworkError(reason: &'static str) {}
+error_chain! {
+    types {
+        Error, ErrorKind, ResultExt, AuthError;
+    }
+
+    foreign_links {
+    }
+
+    errors {
+        PlaceholderError(s: &'static str) {
+            display("{}", s)
+        }
     }
 }
