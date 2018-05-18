@@ -1,0 +1,8 @@
+[package]
+name = "spotify-auth"
+version = "0.1.0"
+authors = ["Dom Williams <me@domwillia.ms>"]
+
+[dependencies]
+chrono = "0.4.2"
+quick-error = "1.2.1"
