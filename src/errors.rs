@@ -1,6 +1,5 @@
 use curl;
-use std::{string, io};
-use json;
+use std::{io, string};
 
 error_chain! {
     types {
@@ -16,18 +15,22 @@ error_chain! {
     errors {
         SpotifyAPIError(s: String) {
             display("Spotify API is incompatible: {}", s)
+            display("Spotify API is incompatible")
         }
 
         AuthenticationError(s: String) {
             display("{}", s)
+            description("Authentication error"),
         }
 
         HttpError(code: u32) {
             display("HTTP response code {}", code)
+            description("HTTP error"),
         }
 
-        HttpErrorJson(code: u32, json: json::JsonValue) {
-            display("HTTP response code {}", code)
+        HttpErrorJson(code: u32, json: String) {
+            display("HTTP error {}: {}", code, json),
+            description("HTTP error"),
         }
     }
 }

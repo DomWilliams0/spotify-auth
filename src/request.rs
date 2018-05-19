@@ -1,26 +1,34 @@
 use errors::*;
 use types::*;
 
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
-use std::collections::HashMap;
 
+use curl::easy;
+use json::{self, JsonValue};
 use querystring;
+use url::form_urlencoded::Serializer;
 use webbrowser;
 
 const URL_AUTHORIZE: &str = "https://accounts.spotify.com/authorize";
+const CALLBACK_HOST: &str = "localhost";
+
+fn redirect_uri(port: u16) -> String {
+    format!("http://{}:{}", CALLBACK_HOST, port)
+}
 
 fn make_query_url(url: &str, params: querystring::QueryParams) -> String {
     format!("{}?{}", url, querystring::stringify(params))
 }
 
 fn parse_response(line: &str) -> Result<String, Error> {
-    // GET /?lala HTTP/1.1
-    // TODO error type for spotify protocol error, eg they changed api
-    // TODO otherwise parse it as query string and can return code/state or error/reason from that
     let mut query_str = line.split(' ')
         .nth(1)
-        .ok_or(ErrorKind::SpotifyAPIError(format!("Bad callback request: {}", line)))?;
+        .ok_or(ErrorKind::SpotifyAPIError(format!(
+            "Bad callback request: {}",
+            line
+        )))?;
     if query_str.starts_with("/?") {
         query_str = &query_str[2..];
     }
@@ -34,7 +42,7 @@ fn parse_response(line: &str) -> Result<String, Error> {
 }
 
 fn wait_for_auth_callback(port: u16) -> Result<String, Error> {
-    let server = TcpListener::bind(("localhost", port))?;
+    let server = TcpListener::bind((CALLBACK_HOST, port))?;
     let (mut stream, _) = server.accept()?; // blocks
     let line = {
         let mut buf = BufReader::new(stream.try_clone()?);
@@ -55,11 +63,11 @@ pub fn authorize(
     // TODO put state in unauth state
     // let state = "make_me_random"; // TODO randomised
 
-    let redirect_uri = format!("http://localhost:{}", callback_port);
+    let uri = redirect_uri(callback_port);
     let mut params: querystring::QueryParams = vec![
         ("client_id", &client_id),
         ("response_type", "code"),
-        ("redirect_uri", &redirect_uri),
+        ("redirect_uri", &uri),
         // ("state", &state),
         ("scope", &scope),
     ];
@@ -81,4 +89,97 @@ pub fn authorize(
     let url = wait_for_auth_callback(callback_port)?;
 
     Ok(url)
+}
+
+pub fn request_token(
+    auth_code: &AuthCode,
+    callback_port: u16,
+    client_secret: &ClientSecret,
+    client_id: &ClientId,
+) -> Result<TokenResponse, Error> {
+    send_token_request(
+        auth_code,
+        &redirect_uri(callback_port),
+        client_secret,
+        client_id,
+    )
+}
+
+fn send_token_request(
+    auth_code: &AuthCode,
+    redirect_uri: &RedirectUri,
+    client_secret: &ClientSecret,
+    client_id: &ClientId,
+) -> Result<TokenResponse, Error> {
+    let url = "https://accounts.spotify.com/api/token";
+
+    let mut req = easy::Easy::new();
+    let params = Serializer::new(String::new())
+        .append_pair("grant_type", "authorization_code")
+        .append_pair("code", auth_code)
+        .append_pair("redirect_uri", redirect_uri)
+        .append_pair("client_id", client_id)
+        .append_pair("client_secret", client_secret)
+        .finish();
+
+    req.post(true)?;
+    req.url(url)?;
+    req.post_fields_copy(params.as_bytes())?;
+
+    let mut response = Vec::new();
+    {
+        let mut handle = req.transfer();
+        handle.write_function(|data| {
+            response.extend_from_slice(data);
+            Ok(data.len())
+        })?;
+
+        handle.perform()?;
+    };
+    let response = String::from_utf8(response)?;
+    let mut parsed = json::parse(&response)
+        .map_err(|_| ErrorKind::SpotifyAPIError("JSON not returned by token endpoint".to_owned()))?;
+
+    let status = req.response_code()?;
+    let success = status == 200;
+
+    if !success {
+        Err(ErrorKind::HttpErrorJson(status, json::stringify(parsed)).into())
+    } else {
+        match (
+            parsed["access_token"].take_string(),
+            parsed["token_type"].take_string(),
+            parsed["scope"].take_string(),
+            parsed["expires_in"].take(),
+            parsed["refresh_token"].take_string(),
+        ) {
+            (
+                Some(access),
+                Some(token_type),
+                Some(scope),
+                JsonValue::Number(expiry),
+                Some(refresh),
+            ) => {
+                if token_type != "Bearer" {
+                    Err(
+                        ErrorKind::SpotifyAPIError(format!("Unknown token type: {}", token_type))
+                            .into(),
+                    )
+                } else {
+                    Ok(TokenResponse {
+                        access_token: access,
+                        scope: scope.parse().map_err(|_| {
+                            ErrorKind::SpotifyAPIError(format!("Invalid scope returned: {}", scope))
+                        })?,
+                        expiry_time: expiry_time(expiry.into()),
+                        refresh_token: refresh,
+                    })
+                }
+            }
+            x => Err(ErrorKind::SpotifyAPIError(format!(
+                "Unknown token response: {} = {:?}",
+                response, x
+            )).into()),
+        }
+    }
 }

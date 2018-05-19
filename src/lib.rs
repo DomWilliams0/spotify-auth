@@ -4,6 +4,7 @@ extern crate chrono;
 extern crate curl;
 extern crate json;
 extern crate querystring;
+extern crate url;
 extern crate webbrowser;
 
 #[macro_use]
@@ -20,6 +21,7 @@ use errors::*;
 #[derive(Debug)]
 struct SpotifyAuth<State> {
     client_id: ClientId,
+    client_secret: ClientSecret,
     callback_port: u16,
     state: State,
 }
@@ -44,17 +46,28 @@ struct Authenticated {
 #[derive(Debug)]
 struct TokenBearing {
     auth_code: AuthCode,
-    access: Token,
-    refresh: Token,
-    expiry_time: ExpiryTime,
+    tokens: TokenResponse,
+}
+
+// helper
+impl<S> SpotifyAuth<S> {
+    fn transition<T>(self, new_state: T) -> SpotifyAuth<T> {
+        SpotifyAuth {
+            client_id: self.client_id,
+            callback_port: self.callback_port,
+            client_secret: self.client_secret,
+            state: new_state,
+        }
+    }
 }
 
 // transitions
 
 impl SpotifyAuth<Unauthenticated> {
-    pub fn new(client_id: ClientId) -> Self {
+    pub fn new(client_id: ClientId, client_secret: ClientSecret) -> Self {
         SpotifyAuth {
             client_id,
+            client_secret,
             callback_port: 30405,
             state: Unauthenticated,
         }
@@ -65,12 +78,32 @@ impl SpotifyAuth<Unauthenticated> {
         scope: &Scope,
         show_dialog: S,
     ) -> Result<SpotifyAuth<Authenticated>, (Self, Error)> {
-        match request::authorize(&self.client_id, self.callback_port, &scope, show_dialog.into()) {
-            Ok(code) => Ok(SpotifyAuth {
-                client_id: self.client_id,
-                callback_port: self.callback_port,
-                state: Authenticated { auth_code: code },
-            }),
+        match request::authorize(
+            &self.client_id,
+            self.callback_port,
+            &scope,
+            show_dialog.into(),
+        ) {
+            Ok(code) => Ok(self.transition(Authenticated { auth_code: code })),
+            Err(e) => Err((self, e)),
+        }
+    }
+}
+
+impl SpotifyAuth<Authenticated> {
+    fn request_token(self) -> Result<SpotifyAuth<TokenBearing>, (Self, Error)> {
+        // TODO dont copy by moving out of current state, but without making self mut here
+        let auth_code = self.state.auth_code.clone();
+        match request::request_token(
+            &auth_code,
+            self.callback_port,
+            &self.client_secret,
+            &self.client_id,
+        ) {
+            Ok(tokens) => Ok(self.transition(TokenBearing {
+                auth_code: auth_code,
+                tokens: tokens,
+            })),
             Err(e) => Err((self, e)),
         }
     }
@@ -81,22 +114,44 @@ mod tests {
     use super::*;
     use std::env;
 
-    fn get_client_id() -> ClientId {
-        env::var("CLIENT_ID").expect("Missing CLIENT_ID in environment")
+    fn get_client_details() -> (ClientId, ClientSecret) {
+        let cid = env::var("CLIENT_ID").expect("Missing CLIENT_ID in environment");
+        let csec = env::var("CLIENT_SECRET").expect("Missing CLIENT_SECRET in environment");
+        (cid, csec)
+    }
+
+    fn new_auth() -> SpotifyAuth<Unauthenticated> {
+        let (cid, csec) = get_client_details();
+        SpotifyAuth::new(cid, csec)
     }
 
     #[test]
     fn creation() {
-        let _auth = SpotifyAuth::new(get_client_id());
+        new_auth();
     }
 
     #[test]
     #[ignore]
     fn authentication() {
-        let auth = SpotifyAuth::new(get_client_id());
-        match auth.authenticate(&String::new(), None) {
-            Ok(SpotifyAuth{state: Authenticated{auth_code}, ..}) => {},
-            Err(e) => panic!("Bad authentication: {:?}", e),
-        }
+        let auth = new_auth();
+        let auth = match auth.authenticate(&Scope::new(), None) {
+            Ok(
+                s @ SpotifyAuth {
+                    state: Authenticated { .. },
+                    ..
+                },
+            ) => s,
+            Err((_, e)) => panic!("Bad authentication: {}", e),
+        };
+
+        let auth = match auth.request_token() {
+            Ok(
+                s @ SpotifyAuth {
+                    state: TokenBearing { .. },
+                    ..
+                },
+            ) => s,
+            Err((_, e)) => panic!("Bad token request: {}", e),
+        };
     }
 }
