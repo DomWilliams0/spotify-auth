@@ -87,13 +87,15 @@ mod tests {
 
     #[test]
     fn creation() {
-        let auth = SpotifyAuth::new(get_client_id());
+        let _auth = SpotifyAuth::new(get_client_id());
     }
 
     #[test]
     fn authentication() {
         let auth = SpotifyAuth::new(get_client_id());
-        let authenticated = auth.authenticate(&String::new(), None);
-        println!("{:?}", authenticated);
+        match auth.authenticate(&String::new(), None) {
+            Ok(SpotifyAuth{state: Authenticated{auth_code}, ..}) => {},
+            Err(e) => panic!("Bad authentication: {:?}", e),
+        }
     }
 }

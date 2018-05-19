@@ -7,6 +7,6 @@ authors = ["Dom Williams <me@domwillia.ms>"]
 chrono = "0.4.2"
 error-chain = "0.11.0"
 curl = "0.4.12"
-querystring = "1.0.0"
+querystring = { git = "https://github.com/DomWilliams0/querystring" }
 json = "0.11.13"
 webbrowser = "0.2.2"

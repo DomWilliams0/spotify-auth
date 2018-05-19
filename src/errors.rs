@@ -1,6 +1,6 @@
 use curl;
+use std::{string, io};
 use json;
-use std::{io, string};
 
 error_chain! {
     types {
@@ -14,7 +14,11 @@ error_chain! {
     }
 
     errors {
-        PlaceholderError(s: &'static str) {
+        SpotifyAPIError(s: String) {
+            display("Spotify API is incompatible: {}", s)
+        }
+
+        AuthenticationError(s: String) {
             display("{}", s)
         }
 
