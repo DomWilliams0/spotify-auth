@@ -1,4 +1,5 @@
 language: rust
+cache: cargo
 rust:
     - stable
     - beta
@@ -6,6 +7,6 @@ rust:
 matrix:
     allow_failures:
         - rust: nightly
-          env:
-              matrix:
-                  secure: p6GR3chocZfT1zaRlLMweKkHZZWLi2lQy8rm6uskSAFcOpfM4Dw0RwrE3NLoV6msKoTkhhDzXn0B8mfm7LsC9rnXy+sOgC4uc0USsXvWBFecchj6o5yg/E5PF1EiWbdbR/RWW04UD1If6rwFcZ1xkdzj9a+7W+ghGUnrgSnB+32ncnGlnvKinQDkT4Tmilz/TTQl0K3XkIIaXE2W3l9vwaZEe7v11PZUs4koQSnU+UOOOpDMzuhmojYyUznHMGn2Xvn/JA+BuPt85vJeSuBF/CfBbXMz8RGn12u1PdqiXIpN+2qdDvH9A1MeQXv3DQECG+IqH3BW9uzzTwfnOC1i0l8CSnRG5TqClc8VnpFJcjYJ63luPdybwqZawML9KJG0TV3t3OB7j/JtNWUd4shE5AegRqouj7L9DwHvWAOn0MkWg6k2FvYyNcxta6vWCwN//dEiWJu+5/DbnYKCHXjVBW25UnnsSQiJSTDISb7Z5vEkwZZj8yXEWdhrboIv0pb7hlVKL2FfwnDniDK7y0JLVGGz5Nmrk23Mk9ippcKuTHdAfT70TtsFGJs33ESZ58v7rBO6IYoM0RO9HzL8KD5+HxD0zYJbYM7NOKdItomShR0K+KLVuOKrNqipkhy8bB6795hQhU0T9Gh6gccCjxbrYNpM+j98Y3mR4F+pqYS68Jk=
+env:
+  matrix:
+      secure: p6GR3chocZfT1zaRlLMweKkHZZWLi2lQy8rm6uskSAFcOpfM4Dw0RwrE3NLoV6msKoTkhhDzXn0B8mfm7LsC9rnXy+sOgC4uc0USsXvWBFecchj6o5yg/E5PF1EiWbdbR/RWW04UD1If6rwFcZ1xkdzj9a+7W+ghGUnrgSnB+32ncnGlnvKinQDkT4Tmilz/TTQl0K3XkIIaXE2W3l9vwaZEe7v11PZUs4koQSnU+UOOOpDMzuhmojYyUznHMGn2Xvn/JA+BuPt85vJeSuBF/CfBbXMz8RGn12u1PdqiXIpN+2qdDvH9A1MeQXv3DQECG+IqH3BW9uzzTwfnOC1i0l8CSnRG5TqClc8VnpFJcjYJ63luPdybwqZawML9KJG0TV3t3OB7j/JtNWUd4shE5AegRqouj7L9DwHvWAOn0MkWg6k2FvYyNcxta6vWCwN//dEiWJu+5/DbnYKCHXjVBW25UnnsSQiJSTDISb7Z5vEkwZZj8yXEWdhrboIv0pb7hlVKL2FfwnDniDK7y0JLVGGz5Nmrk23Mk9ippcKuTHdAfT70TtsFGJs33ESZ58v7rBO6IYoM0RO9HzL8KD5+HxD0zYJbYM7NOKdItomShR0K+KLVuOKrNqipkhy8bB6795hQhU0T9Gh6gccCjxbrYNpM+j98Y3mR4F+pqYS68Jk=
