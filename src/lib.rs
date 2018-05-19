@@ -91,6 +91,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn authentication() {
         let auth = SpotifyAuth::new(get_client_id());
         match auth.authenticate(&String::new(), None) {
