@@ -1,16 +1,26 @@
 #![allow(dead_code)]
 
 extern crate chrono;
+extern crate curl;
+extern crate json;
+extern crate querystring;
+extern crate webbrowser;
 
 #[macro_use]
 extern crate error_chain;
 
 mod errors;
+mod request;
+mod types;
+
+use types::*;
 
 use errors::*;
 
 #[derive(Debug)]
 struct SpotifyAuth<State> {
+    client_id: ClientId,
+    callback_port: u16,
     state: State,
 }
 
@@ -21,15 +31,8 @@ struct Unauthenticated;
 // waiting for the user to login in their browser and
 // enter the url they are forwarded to
 // TODO do this automatically
-#[derive(Debug)]
-struct Authenticating;
-
-type ClientId = String;
-type RedirectUri = String;
-type AuthCode = String;
-type Token = String;
-type Scope = String; // TODO more strongly typed
-type ExpiryTime = chrono::DateTime<chrono::Local>;
+// #[derive(Debug)]
+// struct Authenticating;
 
 // user has logged in
 #[derive(Debug)]
@@ -49,38 +52,48 @@ struct TokenBearing {
 // transitions
 
 impl SpotifyAuth<Unauthenticated> {
-    fn default() -> Self {
+    pub fn new(client_id: ClientId) -> Self {
         SpotifyAuth {
+            client_id,
+            callback_port: 30405,
             state: Unauthenticated,
         }
     }
 
     fn authenticate<S: Into<Option<bool>>>(
         self,
-        client_id: ClientId,
-        redirect_uri: RedirectUri,
-        scope: Scope,
+        scope: &Scope,
         show_dialog: S,
-    ) -> Result<SpotifyAuth<Authenticating>, (Self, Error)> {
-        // TODO send request to /authorize
-        Ok(SpotifyAuth {
-            state: Authenticating {},
-        })
+    ) -> Result<SpotifyAuth<Authenticated>, (Self, Error)> {
+        match request::authorize(&self.client_id, self.callback_port, &scope, show_dialog.into()) {
+            Ok(code) => Ok(SpotifyAuth {
+                client_id: self.client_id,
+                callback_port: self.callback_port,
+                state: Authenticated { auth_code: code },
+            }),
+            Err(e) => Err((self, e)),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
+
+    fn get_client_id() -> ClientId {
+        env::var("CLIENT_ID").expect("Missing CLIENT_ID in environment")
+    }
 
     #[test]
     fn creation() {
-        let auth = SpotifyAuth::default();
+        let auth = SpotifyAuth::new(get_client_id());
     }
 
     #[test]
     fn authentication() {
-        let auth = SpotifyAuth::default();
-        auth.authenticate(String::new(), String::new(), String::new(), None);
+        let auth = SpotifyAuth::new(get_client_id());
+        let authenticated = auth.authenticate(&String::new(), None);
+        println!("{:?}", authenticated);
     }
 }
