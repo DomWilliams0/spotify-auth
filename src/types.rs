@@ -49,7 +49,7 @@ pub fn expiry_time(expires_in: i64) -> ExpiryTime {
     chrono::Local::now() + chrono::Duration::seconds(expires_in)
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum RequestMethod {
     Get,
     Post,

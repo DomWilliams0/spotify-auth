@@ -114,74 +114,44 @@ fn send_token_request(
 ) -> Result<TokenResponse, Error> {
     let url = "https://accounts.spotify.com/api/token";
 
-    let mut req = easy::Easy::new();
-    let params = Serializer::new(String::new())
-        .append_pair("grant_type", "authorization_code")
-        .append_pair("code", auth_code)
-        .append_pair("redirect_uri", redirect_uri)
-        .append_pair("client_id", client_id)
-        .append_pair("client_secret", client_secret)
-        .finish();
+    let params = vec![
+        ("grant_type", "authorization_code"),
+        ("code", auth_code),
+        ("redirect_uri", redirect_uri),
+        ("client_id", client_id),
+        ("client_secret", client_secret),
+    ];
 
-    req.post(true)?;
-    req.url(url)?;
-    req.post_fields_copy(params.as_bytes())?;
+    let mut response = send_api_request(RequestMethod::Post, Some(params), easy::List::new(), url)?;
 
-    let mut response = Vec::new();
-    {
-        let mut handle = req.transfer();
-        handle.write_function(|data| {
-            response.extend_from_slice(data);
-            Ok(data.len())
-        })?;
-
-        handle.perform()?;
-    };
-    let response = String::from_utf8(response)?;
-    let mut parsed = json::parse(&response)
-        .map_err(|_| ErrorKind::SpotifyAPIError("JSON not returned by token endpoint".to_owned()))?;
-
-    let status = req.response_code()?;
-    let success = status == 200;
-
-    if !success {
-        Err(ErrorKind::HttpErrorJson(status, json::stringify(parsed)).into())
-    } else {
-        match (
-            parsed["access_token"].take_string(),
-            parsed["token_type"].take_string(),
-            parsed["scope"].take_string(),
-            parsed["expires_in"].take(),
-            parsed["refresh_token"].take_string(),
-        ) {
-            (
-                Some(access),
-                Some(token_type),
-                Some(scope),
-                JsonValue::Number(expiry),
-                Some(refresh),
-            ) => {
-                if token_type != "Bearer" {
-                    Err(
-                        ErrorKind::SpotifyAPIError(format!("Unknown token type: {}", token_type))
-                            .into(),
-                    )
-                } else {
-                    Ok(TokenResponse {
-                        access_token: access,
-                        scope: scope.parse().map_err(|_| {
-                            ErrorKind::SpotifyAPIError(format!("Invalid scope returned: {}", scope))
-                        })?,
-                        expiry_time: expiry_time(expiry.into()),
-                        refresh_token: refresh,
-                    })
-                }
+    match (
+        response["access_token"].take_string(),
+        response["token_type"].take_string(),
+        response["scope"].take_string(),
+        response["expires_in"].take(),
+        response["refresh_token"].take_string(),
+    ) {
+        (Some(access), Some(token_type), Some(scope), JsonValue::Number(expiry), Some(refresh)) => {
+            if token_type != "Bearer" {
+                Err(
+                    ErrorKind::SpotifyAPIError(format!("Unknown token type: {}", token_type))
+                        .into(),
+                )
+            } else {
+                Ok(TokenResponse {
+                    access_token: access,
+                    scope: scope.parse().map_err(|_| {
+                        ErrorKind::SpotifyAPIError(format!("Invalid scope returned: {}", scope))
+                    })?,
+                    expiry_time: expiry_time(expiry.into()),
+                    refresh_token: refresh,
+                })
             }
-            x => Err(ErrorKind::SpotifyAPIError(format!(
-                "Unknown token response: {} = {:?}",
-                response, x
-            )).into()),
         }
+        x => Err(ErrorKind::SpotifyAPIError(format!(
+            "Unknown token response: {} = {:?}",
+            response, x
+        )).into()),
     }
 }
 
@@ -191,27 +161,37 @@ pub fn access_api<'a>(
     params: Option<querystring::QueryParams<'a>>,
     endpoint: &Endpoint,
 ) -> Result<json::JsonValue, Error> {
-    let mut req = easy::Easy::new();
-
-    let url: Cow<str> = endpoint.into();
-    let url = match method {
-        RequestMethod::Get => {
-            req.get(true)?;
-            if let Some(params) = params {
-                make_query_url(endpoint, params).into()
-            } else {
-                url
-            }
-        }
-
-        _ => unimplemented!(),
-    };
-
     let headers = {
         let mut list = easy::List::new();
         list.append(&format!("Authorization: Bearer {}", access_token))?;
         list
     };
+    send_api_request(method, params, headers, endpoint)
+}
+
+fn send_api_request<'a>(
+    method: RequestMethod,
+    params: Option<querystring::QueryParams<'a>>,
+    headers: easy::List,
+    endpoint: &Endpoint,
+) -> Result<json::JsonValue, Error> {
+    let mut req = easy::Easy::new();
+    let mut url: Cow<str> = endpoint.into();
+
+    // add params
+    if let Some(params) = params {
+        match method {
+            RequestMethod::Get => {
+                // GET query parameters modify the url
+                url = make_query_url(endpoint, params).into()
+            }
+            _ => {
+                // other parameters are url encoded in the body
+                let body = Serializer::new(String::new()).extend_pairs(params).finish();
+                req.post_fields_copy(body.as_bytes())?;
+            }
+        };
+    }
 
     req.url(&url)?;
     req.http_headers(headers)?;
