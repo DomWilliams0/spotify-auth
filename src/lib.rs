@@ -109,12 +109,21 @@ impl SpotifyAuth<Authenticated> {
 }
 
 impl SpotifyAuth<TokenBearing> {
-    fn access_api(
+    fn access_api<'a, P>(
         &self,
         method: RequestMethod,
+        params: P,
         endpoint: &Endpoint,
-    ) -> Result<json::JsonValue, Error> {
-        request::access_api(&self.state.tokens.access_token, method, endpoint)
+    ) -> Result<json::JsonValue, Error>
+    where
+        P: Into<Option<querystring::QueryParams<'a>>>,
+    {
+        request::access_api(
+            &self.state.tokens.access_token,
+            method,
+            params.into(),
+            endpoint,
+        )
     }
 }
 
@@ -164,7 +173,8 @@ mod tests {
         };
 
         match auth.access_api(
-            RequestMethod::Get(vec![("ids", "4UgQ3EFa8fEeaIEg54uV5b")]),
+            RequestMethod::Get,
+            vec![("ids", "4UgQ3EFa8fEeaIEg54uV5b")],
             "https://api.spotify.com/v1/artists/",
         ) {
             Ok(_) => {}

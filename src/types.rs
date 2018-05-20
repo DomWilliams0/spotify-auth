@@ -1,7 +1,6 @@
 use errors;
 
 use chrono;
-use json;
 use std::ops::Deref;
 use std::str::FromStr;
 
@@ -50,10 +49,10 @@ pub fn expiry_time(expires_in: i64) -> ExpiryTime {
     chrono::Local::now() + chrono::Duration::seconds(expires_in)
 }
 
-use querystring;
-pub enum RequestMethod<'a> {
-    Get(querystring::QueryParams<'a>),
-    Post(json::JsonValue),
-    Put(json::JsonValue),
-    Delete(json::JsonValue),
+#[derive(Debug, Copy, Clone)]
+pub enum RequestMethod {
+    Get,
+    Post,
+    Put,
+    Delete,
 }

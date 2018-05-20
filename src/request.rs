@@ -1,6 +1,7 @@
 use errors::*;
 use types::*;
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
@@ -184,17 +185,23 @@ fn send_token_request(
     }
 }
 
-pub fn access_api(
+pub fn access_api<'a>(
     access_token: &Token,
     method: RequestMethod,
+    params: Option<querystring::QueryParams<'a>>,
     endpoint: &Endpoint,
 ) -> Result<json::JsonValue, Error> {
     let mut req = easy::Easy::new();
 
+    let url: Cow<str> = endpoint.into();
     let url = match method {
-        RequestMethod::Get(params) => {
+        RequestMethod::Get => {
             req.get(true)?;
-            make_query_url(endpoint, params)
+            if let Some(params) = params {
+                make_query_url(endpoint, params).into()
+            } else {
+                url
+            }
         }
 
         _ => unimplemented!(),
