@@ -14,9 +14,8 @@ mod errors;
 mod request;
 mod types;
 
-use types::*;
-
 use errors::*;
+use types::*;
 
 #[derive(Debug)]
 struct SpotifyAuth<State> {
@@ -109,6 +108,16 @@ impl SpotifyAuth<Authenticated> {
     }
 }
 
+impl SpotifyAuth<TokenBearing> {
+    fn access_api(
+        &self,
+        method: RequestMethod,
+        endpoint: &Endpoint,
+    ) -> Result<json::JsonValue, Error> {
+        request::access_api(&self.state.tokens.access_token, method, endpoint)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -153,5 +162,13 @@ mod tests {
             ) => s,
             Err((_, e)) => panic!("Bad token request: {}", e),
         };
+
+        match auth.access_api(
+            RequestMethod::Get(vec![("ids", "4UgQ3EFa8fEeaIEg54uV5b")]),
+            "https://api.spotify.com/v1/artists/",
+        ) {
+            Ok(_) => {}
+            Err(e) => panic!("Bad API response: {}", e),
+        }
     }
 }

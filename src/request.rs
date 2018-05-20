@@ -183,3 +183,49 @@ fn send_token_request(
         }
     }
 }
+
+pub fn access_api(
+    access_token: &Token,
+    method: RequestMethod,
+    endpoint: &Endpoint,
+) -> Result<json::JsonValue, Error> {
+    let mut req = easy::Easy::new();
+
+    let url = match method {
+        RequestMethod::Get(params) => {
+            req.get(true)?;
+            make_query_url(endpoint, params)
+        }
+
+        _ => unimplemented!(),
+    };
+
+    let headers = {
+        let mut list = easy::List::new();
+        list.append(&format!("Authorization: Bearer {}", access_token))?;
+        list
+    };
+
+    req.url(&url)?;
+    req.http_headers(headers)?;
+
+    let mut response = Vec::new();
+    {
+        let mut handle = req.transfer();
+        handle.write_function(|data| {
+            response.extend_from_slice(data);
+            Ok(data.len())
+        })?;
+
+        handle.perform()?;
+    };
+    let response = String::from_utf8(response)?;
+    let parsed = json::parse(&response).map_err(|_| {
+        ErrorKind::SpotifyAPIError(format!("JSON not returned by {} endpoint", endpoint))
+    })?;
+
+    match req.response_code()? {
+        200 => Ok(parsed),
+        err => Err(ErrorKind::HttpErrorJson(err, json::stringify(parsed)).into()),
+    }
+}

@@ -1,12 +1,14 @@
 use errors;
 
 use chrono;
+use json;
 use std::ops::Deref;
 use std::str::FromStr;
 
 pub type ClientId = String;
 pub type ClientSecret = String;
 pub type RedirectUri = String;
+pub type Endpoint = str; // TODO make all str?
 pub type AuthCode = String;
 pub type Token = String;
 pub type ExpiryTime = chrono::DateTime<chrono::Local>;
@@ -46,4 +48,12 @@ impl Deref for Scope {
 
 pub fn expiry_time(expires_in: i64) -> ExpiryTime {
     chrono::Local::now() + chrono::Duration::seconds(expires_in)
+}
+
+use querystring;
+pub enum RequestMethod<'a> {
+    Get(querystring::QueryParams<'a>),
+    Post(json::JsonValue),
+    Put(json::JsonValue),
+    Delete(json::JsonValue),
 }
