@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 
+use base64;
 use curl::easy;
 use json::{self, JsonValue};
 use querystring;
@@ -13,6 +14,7 @@ use url::form_urlencoded::Serializer;
 use webbrowser;
 
 const URL_AUTHORIZE: &str = "https://accounts.spotify.com/authorize";
+const URL_TOKEN: &str = "https://accounts.spotify.com/api/token";
 const CALLBACK_HOST: &str = "localhost";
 
 fn redirect_uri(port: u16) -> String {
@@ -21,6 +23,23 @@ fn redirect_uri(port: u16) -> String {
 
 fn make_query_url(url: &str, params: querystring::QueryParams) -> String {
     format!("{}?{}", url, querystring::stringify(params))
+}
+
+#[derive(Debug)]
+struct TokenResponse {
+    access_token: Token,
+    scope: Scope,
+    expiry_time: ExpiryTime,
+    refresh_token: Option<Token>,
+}
+
+impl TokenResponse {
+    fn convert_to_tokens(self, old: Tokens) -> Tokens {
+        Tokens {
+            refresh_token: self.refresh_token.unwrap_or(old.refresh_token),
+            ..old
+        }
+    }
 }
 
 fn parse_response(line: &str) -> Result<String, Error> {
@@ -51,7 +70,7 @@ fn wait_for_auth_callback(port: u16) -> Result<String, Error> {
         buf.read_line(&mut s)?;
         s
     };
-    stream.write_all("All done, now go back to your application".as_bytes())?;
+    stream.write_all(b"All done, now go back to your application")?;
     parse_response(&line)
 }
 
@@ -97,33 +116,39 @@ pub fn request_token(
     callback_port: u16,
     client_secret: &ClientSecret,
     client_id: &ClientId,
-) -> Result<TokenResponse, Error> {
-    send_token_request(
-        auth_code,
-        &redirect_uri(callback_port),
-        client_secret,
-        client_id,
-    )
-}
-
-fn send_token_request(
-    auth_code: &AuthCode,
-    redirect_uri: &RedirectUri,
-    client_secret: &ClientSecret,
-    client_id: &ClientId,
-) -> Result<TokenResponse, Error> {
-    let url = "https://accounts.spotify.com/api/token";
-
+) -> Result<Tokens, Error> {
+    let redirect = redirect_uri(callback_port);
     let params = vec![
         ("grant_type", "authorization_code"),
         ("code", auth_code),
-        ("redirect_uri", redirect_uri),
+        ("redirect_uri", &redirect),
         ("client_id", client_id),
         ("client_secret", client_secret),
     ];
 
-    let mut response = send_api_request(RequestMethod::Post, Some(params), easy::List::new(), url)?;
+    let response = send_api_request(
+        RequestMethod::Post,
+        Some(params),
+        easy::List::new(),
+        URL_TOKEN,
+    )?;
 
+    let token_resp = parse_token_response(response)?;
+    match token_resp.refresh_token {
+        None => Err(ErrorKind::SpotifyAPIError(format!(
+            "Refresh token not returned by {}",
+            URL_TOKEN
+        )).into()),
+        Some(refresh) => Ok(Tokens {
+            access_token: token_resp.access_token,
+            scope: token_resp.scope,
+            expiry_time: token_resp.expiry_time,
+            refresh_token: refresh,
+        }),
+    }
+}
+
+fn parse_token_response(mut response: json::JsonValue) -> Result<TokenResponse, Error> {
     match (
         response["access_token"].take_string(),
         response["token_type"].take_string(),
@@ -131,7 +156,7 @@ fn send_token_request(
         response["expires_in"].take(),
         response["refresh_token"].take_string(),
     ) {
-        (Some(access), Some(token_type), Some(scope), JsonValue::Number(expiry), Some(refresh)) => {
+        (Some(access), Some(token_type), Some(scope), JsonValue::Number(expiry), refresh) => {
             if token_type != "Bearer" {
                 Err(
                     ErrorKind::SpotifyAPIError(format!("Unknown token type: {}", token_type))
@@ -167,6 +192,37 @@ pub fn access_api<'a>(
         list
     };
     send_api_request(method, params, headers, endpoint)
+}
+
+pub fn refresh_token(
+    tokens: &mut Tokens,
+    client_id: &ClientId,
+    client_secret: &ClientSecret,
+) -> Result<(), Error> {
+    let refresh_token = tokens.refresh_token.clone(); // TODO possible to remove clone?
+    let params = vec![
+        ("grant_type", "refresh_token"),
+        ("refresh_token", &refresh_token),
+    ];
+    let headers = {
+        let mut list = easy::List::new();
+        let basic = base64::encode(&format!("{}:{}", client_id, client_secret));
+        list.append(&format!("Authorization: Basic {}", basic))?;
+        list
+    };
+
+    let response = send_api_request(RequestMethod::Post, Some(params), headers, URL_TOKEN)?;
+    let token_resp = parse_token_response(response)?;
+
+    // TODO is there a better way?
+    tokens.access_token = token_resp.access_token;
+    tokens.scope = token_resp.scope;
+    tokens.expiry_time = token_resp.expiry_time;
+    if let Some(new_refresh) = token_resp.refresh_token {
+        tokens.refresh_token = new_refresh;
+    }
+
+    Ok(())
 }
 
 fn send_api_request<'a>(

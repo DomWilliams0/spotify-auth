@@ -13,7 +13,7 @@ pub type Token = String;
 pub type ExpiryTime = chrono::DateTime<chrono::Local>;
 
 #[derive(Debug)]
-pub struct TokenResponse {
+pub struct Tokens {
     pub access_token: Token,
     pub scope: Scope,
     pub expiry_time: ExpiryTime,

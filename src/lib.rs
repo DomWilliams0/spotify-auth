@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+extern crate base64;
 extern crate chrono;
 extern crate curl;
 extern crate json;
@@ -48,7 +49,7 @@ struct Authenticated {
 #[derive(Debug)]
 struct TokenBearing {
     auth_code: AuthCode,
-    tokens: TokenResponse,
+    tokens: Tokens,
 }
 
 // helper
@@ -134,6 +135,12 @@ impl SpotifyAuth<TokenBearing> {
             endpoint,
         )
     }
+
+    fn refresh_token(&mut self) -> Result<(), Error> {
+        request::refresh_token(&mut self.state.tokens, &self.client_id, &self.client_secret)?;
+        debug!("Requested token refresh, received {:?}", self.state.tokens);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -175,7 +182,7 @@ mod tests {
             Err((_, e)) => panic!("Bad authentication: {}", e),
         };
 
-        let auth = match auth.request_token() {
+        let mut auth = match auth.request_token() {
             Ok(
                 s @ SpotifyAuth {
                     state: TokenBearing { .. },
@@ -192,6 +199,13 @@ mod tests {
         ) {
             Ok(_) => {}
             Err(e) => panic!("Bad API response: {}", e),
+        }
+
+        for _ in 0..4 {
+            match auth.refresh_token() {
+                Ok(_) => {}
+                Err(e) => panic!("Bad refresh: {}", e),
+            }
         }
     }
 }
