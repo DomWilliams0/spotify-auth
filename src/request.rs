@@ -177,6 +177,10 @@ fn send_api_request<'a>(
 ) -> Result<json::JsonValue, Error> {
     let mut req = easy::Easy::new();
     let mut url: Cow<str> = endpoint.into();
+    debug!(
+        "Sending {:?} request to {} with parameters {:?} and headers {:?}",
+        method, url, params, headers
+    );
 
     // add params
     if let Some(params) = params {

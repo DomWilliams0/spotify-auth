@@ -10,6 +10,9 @@ extern crate webbrowser;
 #[macro_use]
 extern crate error_chain;
 
+#[macro_use]
+extern crate log;
+
 mod errors;
 mod request;
 mod types;
@@ -83,7 +86,10 @@ impl SpotifyAuth<Unauthenticated> {
             &scope,
             show_dialog.into(),
         ) {
-            Ok(code) => Ok(self.transition(Authenticated { auth_code: code })),
+            Ok(code) => {
+                debug!("Authenticated with Spotify, auth code = {}", code);
+                Ok(self.transition(Authenticated { auth_code: code }))
+            }
             Err(e) => Err((self, e)),
         }
     }
@@ -99,10 +105,13 @@ impl SpotifyAuth<Authenticated> {
             &self.client_secret,
             &self.client_id,
         ) {
-            Ok(tokens) => Ok(self.transition(TokenBearing {
-                auth_code: auth_code,
-                tokens: tokens,
-            })),
+            Ok(tokens) => {
+                debug!("Requested token, received {:?}", tokens);
+                Ok(self.transition(TokenBearing {
+                    auth_code: auth_code,
+                    tokens: tokens,
+                }))
+            }
             Err(e) => Err((self, e)),
         }
     }
@@ -132,6 +141,8 @@ mod tests {
     use super::*;
     use std::env;
 
+    extern crate env_logger;
+
     fn get_client_details() -> (ClientId, ClientSecret) {
         let cid = env::var("CLIENT_ID").expect("Missing CLIENT_ID in environment");
         let csec = env::var("CLIENT_SECRET").expect("Missing CLIENT_SECRET in environment");
@@ -145,12 +156,14 @@ mod tests {
 
     #[test]
     fn creation() {
+        env_logger::init();
         new_auth();
     }
 
     #[test]
     #[ignore]
     fn authentication() {
+        env_logger::init();
         let auth = new_auth();
         let auth = match auth.authenticate(&Scope::new(), None) {
             Ok(
