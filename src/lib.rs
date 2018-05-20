@@ -109,8 +109,8 @@ impl SpotifyAuth<Authenticated> {
             Ok(tokens) => {
                 debug!("Requested token, received {:?}", tokens);
                 Ok(self.transition(TokenBearing {
-                    auth_code: auth_code,
-                    tokens: tokens,
+                    auth_code,
+                    tokens,
                 }))
             }
             Err(e) => Err((self, e)),

@@ -45,7 +45,7 @@ impl TokenResponse {
 fn parse_response(line: &str) -> Result<String, Error> {
     let mut query_str = line.split(' ')
         .nth(1)
-        .ok_or(ErrorKind::SpotifyAPIError(format!(
+        .ok_or_else(|| ErrorKind::SpotifyAPIError(format!(
             "Bad callback request: {}",
             line
         )))?;
