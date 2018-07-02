@@ -12,11 +12,12 @@ pub type Endpoint = str; // TODO make all str?
 pub type AuthCode = String;
 pub type Token = String;
 pub type ExpiryTime = chrono::DateTime<chrono::Local>;
+pub type ETag = String;
 
 #[derive(Debug)]
 pub enum ApiResponse {
     Cached,
-    Response(json::JsonValue),
+    Response(json::JsonValue, Option<ETag>),
 }
 
 #[derive(Debug)]
@@ -28,12 +29,14 @@ pub struct Tokens {
 }
 
 // TODO more strongly typed
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Scope(String);
 
 impl Scope {
-    pub fn new() -> Self {
-        Self { 0: String::new() }
+    pub fn new(scope: &str) -> Self {
+        Self {
+            0: scope.to_owned(),
+        }
     }
 }
 

@@ -104,6 +104,7 @@ impl StateMachine<TokenBearing> {
         method: RequestMethod,
         params: P,
         endpoint: &Endpoint,
+        etag: Option<&ETag>,
     ) -> Result<ApiResponse, Error>
     where
         P: Into<Option<querystring::QueryParams<'a>>>,
@@ -113,6 +114,7 @@ impl StateMachine<TokenBearing> {
             method,
             params.into(),
             endpoint,
+            etag,
         )
     }
 
@@ -152,7 +154,7 @@ mod tests {
     fn authentication() {
         env_logger::init();
         let auth = new_auth();
-        let auth = match auth.authenticate(&Scope::new(), None) {
+        let auth = match auth.authenticate(&Scope::new("user-library-read"), None) {
             Ok(
                 s @ StateMachine {
                     state: Authenticated { .. },
@@ -176,6 +178,7 @@ mod tests {
             RequestMethod::Get,
             vec![("ids", "4UgQ3EFa8fEeaIEg54uV5b")],
             "https://api.spotify.com/v1/artists/",
+            None,
         ) {
             Ok(_) => {}
             Err(e) => panic!("Bad API response: {}", e),
@@ -186,6 +189,29 @@ mod tests {
                 Ok(_) => {}
                 Err(e) => panic!("Bad refresh: {}", e),
             }
+        }
+
+        // caching
+        let etag = match auth.access_api(
+            RequestMethod::Get,
+            vec![],
+            "https://api.spotify.com/v1/me/tracks/",
+            None,
+        ) {
+            Ok(ApiResponse::Response(_, etag)) => etag,
+            Ok(_) => panic!("Bad response, should not be cached"),
+            Err(e) => panic!("Bad API response: {}", e),
+        };
+
+        match auth.access_api(
+            RequestMethod::Get,
+            vec![],
+            "https://api.spotify.com/v1/me/tracks/",
+            etag.as_ref(),
+        ) {
+            Ok(ApiResponse::Cached) => {}
+            Ok(_) => panic!("Bad response, should be cached"),
+            Err(e) => panic!("Bad API response: {}", e),
         }
     }
 }

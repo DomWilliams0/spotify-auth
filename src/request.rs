@@ -110,7 +110,7 @@ pub fn authorize(
 
 fn ensure_response_value(response: Result<ApiResponse, Error>) -> Result<json::JsonValue, Error> {
     match response {
-        Ok(ApiResponse::Response(resp)) => Ok(resp),
+        Ok(ApiResponse::Response(resp, ..)) => Ok(resp),
         Ok(r) => Err(ErrorKind::SpotifyAPIError(format!(
             "Odd cached response while getting token: {:?}",
             r
@@ -193,10 +193,16 @@ pub fn access_api<'a>(
     method: RequestMethod,
     params: Option<querystring::QueryParams<'a>>,
     endpoint: &Endpoint,
+    etag: Option<&ETag>,
 ) -> Result<ApiResponse, Error> {
     let headers = {
         let mut list = easy::List::new();
         list.append(&format!("Authorization: Bearer {}", access_token))?;
+
+        if let Some(tag) = etag {
+            list.append(&format!("If-None-Match: {}", tag))?;
+        }
+
         list
     };
     send_api_request(method, params, headers, endpoint)
@@ -270,6 +276,8 @@ fn send_api_request<'a>(
     req.http_headers(headers)?;
 
     let mut response = Vec::new();
+    let mut etag = None;
+    const ETAG: &str = "ETag: ";
     {
         let mut handle = req.transfer();
         handle.write_function(|data| {
@@ -277,16 +285,33 @@ fn send_api_request<'a>(
             Ok(data.len())
         })?;
 
+        handle.header_function(|header| {
+            let h = String::from_utf8(header.to_vec()).unwrap();
+            if etag.is_none() && h.starts_with(ETAG) {
+                let value = &h[ETAG.len()..].trim_right();
+                etag = Some(value.to_string());
+            }
+            true
+        })?;
+
         handle.perform()?;
     };
+
+    let resp_code = req.response_code()?;
+    if resp_code == 304 {
+        return Ok(ApiResponse::Cached);
+    }
+
     let response = String::from_utf8(response)?;
     let parsed = json::parse(&response).map_err(|_| {
-        ErrorKind::SpotifyAPIError(format!("JSON not returned by {} endpoint", endpoint))
+        ErrorKind::SpotifyAPIError(format!(
+            "JSON not returned by {} endpoint: {:?}",
+            endpoint, response
+        ))
     })?;
 
     match req.response_code()? {
-        200 => Ok(ApiResponse::Response(parsed)),
-        304 => Ok(ApiResponse::Cached),
+        200 => Ok(ApiResponse::Response(parsed, etag)),
         err => Err(ErrorKind::HttpErrorJson(err, json::stringify(parsed)).into()),
     }
 }
