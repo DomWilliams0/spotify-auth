@@ -1,8 +1,8 @@
 use querystring;
 
 use errors::*;
-use types::*;
 use request;
+use types::*;
 
 #[derive(Debug)]
 pub struct StateMachine<State> {
@@ -91,10 +91,7 @@ impl StateMachine<Authenticated> {
         ) {
             Ok(tokens) => {
                 debug!("Requested token, received {:?}", tokens);
-                Ok(self.transition(TokenBearing {
-                    auth_code,
-                    tokens,
-                }))
+                Ok(self.transition(TokenBearing { auth_code, tokens }))
             }
             Err(e) => Err((self, e)),
         }

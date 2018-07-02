@@ -16,5 +16,5 @@ extern crate log;
 
 pub mod errors;
 mod request;
-pub mod types;
 pub mod states;
+pub mod types;
