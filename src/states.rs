@@ -1,4 +1,3 @@
-use json;
 use querystring;
 
 use errors::*;
@@ -108,7 +107,7 @@ impl StateMachine<TokenBearing> {
         method: RequestMethod,
         params: P,
         endpoint: &Endpoint,
-    ) -> Result<json::JsonValue, Error>
+    ) -> Result<ApiResponse, Error>
     where
         P: Into<Option<querystring::QueryParams<'a>>>,
     {

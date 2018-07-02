@@ -111,6 +111,17 @@ pub fn authorize(
     Ok(url)
 }
 
+fn ensure_response_value(response: Result<ApiResponse, Error>) -> Result<json::JsonValue, Error> {
+    match response {
+        Ok(ApiResponse::Response(resp)) => Ok(resp),
+        Ok(r) => Err(ErrorKind::SpotifyAPIError(format!(
+            "Odd cached response while getting token: {:?}",
+            r
+        )).into()),
+        Err(e) => Err(e),
+    }
+}
+
 pub fn request_token(
     auth_code: &AuthCode,
     callback_port: u16,
@@ -126,12 +137,12 @@ pub fn request_token(
         ("client_secret", client_secret),
     ];
 
-    let response = send_api_request(
+    let response = ensure_response_value(send_api_request(
         RequestMethod::Post,
         Some(params),
         easy::List::new(),
         URL_TOKEN,
-    )?;
+    ))?;
 
     let token_resp = parse_token_response(response)?;
     match token_resp.refresh_token {
@@ -185,7 +196,7 @@ pub fn access_api<'a>(
     method: RequestMethod,
     params: Option<querystring::QueryParams<'a>>,
     endpoint: &Endpoint,
-) -> Result<json::JsonValue, Error> {
+) -> Result<ApiResponse, Error> {
     let headers = {
         let mut list = easy::List::new();
         list.append(&format!("Authorization: Bearer {}", access_token))?;
@@ -211,7 +222,12 @@ pub fn refresh_token(
         list
     };
 
-    let response = send_api_request(RequestMethod::Post, Some(params), headers, URL_TOKEN)?;
+    let response = ensure_response_value(send_api_request(
+        RequestMethod::Post,
+        Some(params),
+        headers,
+        URL_TOKEN,
+    ))?;
     let token_resp = parse_token_response(response)?;
 
     // TODO is there a better way?
@@ -230,7 +246,7 @@ fn send_api_request<'a>(
     params: Option<querystring::QueryParams<'a>>,
     headers: easy::List,
     endpoint: &Endpoint,
-) -> Result<json::JsonValue, Error> {
+) -> Result<ApiResponse, Error> {
     let mut req = easy::Easy::new();
     let mut url: Cow<str> = endpoint.into();
     debug!(
@@ -272,7 +288,8 @@ fn send_api_request<'a>(
     })?;
 
     match req.response_code()? {
-        200 => Ok(parsed),
+        200 => Ok(ApiResponse::Response(parsed)),
+        304 => Ok(ApiResponse::Cached),
         err => Err(ErrorKind::HttpErrorJson(err, json::stringify(parsed)).into()),
     }
 }

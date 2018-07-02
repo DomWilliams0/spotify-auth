@@ -1,6 +1,7 @@
 use errors;
 
 use chrono;
+use json;
 use std::ops::Deref;
 use std::str::FromStr;
 
@@ -11,6 +12,12 @@ pub type Endpoint = str; // TODO make all str?
 pub type AuthCode = String;
 pub type Token = String;
 pub type ExpiryTime = chrono::DateTime<chrono::Local>;
+
+#[derive(Debug)]
+pub enum ApiResponse {
+    Cached,
+    Response(json::JsonValue),
+}
 
 #[derive(Debug)]
 pub struct Tokens {
